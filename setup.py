@@ -24,7 +24,7 @@ setup(
     name=pname,
     version="0.1",
     packages=find_packages(),
-    scripts=['say_hello.py'],
+    scripts=['tools/testrun.py'],
 
     # Project uses reStructuredText, so ensure that the docutils get
     # installed or upgraded on the target machine
