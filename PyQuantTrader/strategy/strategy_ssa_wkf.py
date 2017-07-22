@@ -203,7 +203,9 @@ class AcctStats(bt.Analyzer):
 if __name__ == '__main__':  
     
     # Walk forward
-    tscv = TimeSeriesSplitImproved(10)
+    tscv = wfd.TimeSeriesSplitImproved(10)
+    dataframe = pd.read_csv('D:/Projects/PyQuantTrader/datas/yhoo-1996-2015.txt', index_col=0, parse_dates=True)  
+    dataframe['openinterest'] = 0
     split = tscv.split(dataframe, fixed_length=True, train_splits=2)
     
     walk_forward_results = list()
@@ -211,7 +213,7 @@ if __name__ == '__main__':
     for train, test in split:        
         # TRAINING
         trainer = bt.Cerebro(stdstats=False, maxcpus=1)
-        trainer.broker.set_cash(1000000)
+        trainer.broker.set_cash(10000)
         trainer.broker.setcommission(0.02)
         trainer.addanalyzer(AcctStats)
         #trainer.addsizer(PropSizer)
@@ -219,16 +221,16 @@ if __name__ == '__main__':
      
         trainer.addstrategy(MyStrategy)  
         
-        data.tmp = bt.feeds.PandasData(dataname=dataframe.iloc[train]) 
-        print(data.tmp)
-        trainer.adddata(data.tmp)
+        data_tmp = bt.feeds.PandasData(dataname=dataframe.iloc[train]) 
+        print(data_tmp)
+        trainer.adddata(data_tmp)
         res = trainer.run()
         # Get optimal combination
             
         # TESTING
         tester.addstrategy(MyStrategy)    # Test with optimal combination
-        data.tmp = bt.feeds.PandasData(dataname=dataframe.iloc[test])                                                                      # corresponds to testing
-        tester.adddata(data.tmp)
+        data_tmp = bt.feeds.PandasData(dataname=dataframe.iloc[test])                                                                      # corresponds to testing
+        tester.adddata(data_tmp)
      
         res = tester.run()
         res_dict = res[0].analyzers.acctstats.get_analysis()
@@ -239,4 +241,4 @@ if __name__ == '__main__':
         walk_forward_results.append(res_dict)
     
     wfdf = DataFrame(walk_forward_results)
-    wfdf
+    print(wfdf)
