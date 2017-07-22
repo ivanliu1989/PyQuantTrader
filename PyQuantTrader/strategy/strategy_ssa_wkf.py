@@ -201,32 +201,42 @@ class AcctStats(bt.Analyzer):
 
 
 if __name__ == '__main__':  
-    # Create a cerebro entity  
-    cerebro = bt.Cerebro()  
-    # Add a strategy  
-    cerebro.addstrategy(MyStrategy)  
-    # 本地数据，笔者用Wind获取的东风汽车数据以csv形式存储在本地。  
-    # parase_dates = True是为了读取csv为dataframe的时候能够自动识别datetime格式的字符串，big作为index  
-    # 注意，这里最后的pandas要符合backtrader的要求的格式  
-    dataframe = pd.read_csv('./datas/yhoo-1996-2015.txt', index_col=0, parse_dates=True)  
-    dataframe['openinterest'] = 0  
-    data = bt.feeds.PandasData(dataname=dataframe,  
-                            fromdate = datetime.datetime(2013, 1, 1),  
-                            todate = datetime.datetime(2015, 12, 31)  
-                            )  
-    # Add the Data Feed to Cerebro  
-    cerebro.adddata(data)  
-    # Set our desired cash start  
-    cerebro.broker.setcash(100000.0)  
-    # 设置每笔交易交易的股票数量  
-    cerebro.addsizer(bt.sizers.FixedSize, stake=500)  
-    # Set the commission  
-    cerebro.broker.setcommission(commission=0.0002)  
-    # Print out the starting conditions  
-    print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())  
-    # Run over everything  
-    cerebro.run()  
-    # Print out the final result  
-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())  
-    cerebro.plot()  
     
+    # Walk forward
+    tscv = TimeSeriesSplitImproved(10)
+    split = tscv.split(dataframe, fixed_length=True, train_splits=2)
+    
+    walk_forward_results = list()
+    # Be prepared: this will take a while
+    for train, test in split:        
+        # TRAINING
+        trainer = bt.Cerebro(stdstats=False, maxcpus=1)
+        trainer.broker.set_cash(1000000)
+        trainer.broker.setcommission(0.02)
+        trainer.addanalyzer(AcctStats)
+        #trainer.addsizer(PropSizer)
+        tester = deepcopy(trainer)
+     
+        trainer.addstrategy(MyStrategy)  
+        
+        data.tmp = bt.feeds.PandasData(dataname=dataframe.iloc[train]) 
+        print(data.tmp)
+        trainer.adddata(data.tmp)
+        res = trainer.run()
+        # Get optimal combination
+            
+        # TESTING
+        tester.addstrategy(MyStrategy)    # Test with optimal combination
+        data.tmp = bt.feeds.PandasData(dataname=dataframe.iloc[test])                                                                      # corresponds to testing
+        tester.adddata(data.tmp)
+     
+        res = tester.run()
+        res_dict = res[0].analyzers.acctstats.get_analysis()
+        
+        
+        res_dict["start_date"] = dataframe.iloc[test[0]].name
+        res_dict["end_date"] = dataframe.iloc[test[-1]].name
+        walk_forward_results.append(res_dict)
+    
+    wfdf = DataFrame(walk_forward_results)
+    wfdf
