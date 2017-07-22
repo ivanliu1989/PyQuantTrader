@@ -8,4 +8,6 @@ PyQuantTrader.egg-info/requires.txt
 PyQuantTrader.egg-info/top_level.txt
 PyQuantTrader/testrun/__init__.py
 PyQuantTrader/testrun/testrun.py
+PyQuantTrader/validation/__init__.py
+PyQuantTrader/validation/walkforward.py
 tools/testrun.py
