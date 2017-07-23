@@ -46,7 +46,7 @@ if __name__ == '__main__':
     leverage = 20
     init_assets = cash * leverage
     positions = init_assets * 0.02
-    itrs = 100
+    itrs = 40
     
     # Walk forward
     tscv = pqt_val.TimeSeriesSplitImproved(5)
@@ -120,7 +120,30 @@ if __name__ == '__main__':
     cerebro_wf.addsizer(bt.sizers.SizerFix, stake=positions)
     cerebro_wf.addanalyzer(pqt_ana.AcctStats)
      
-    cerebro_wf.run()
+	 cerebro_wf.addanalyzer(bt.analyzers.PyFolio)
+    strats = cerebro_wf.run()
     
     cerebro_wf.plot(iplot=True, volume=True)
     cerebro_wf.broker.get_value()
+	
+	 strat0 = strats[0]
+	 pyfolio = strat0.analyzers.getbyname('pyfolio')
+	 returns, positions, transactions, gross_lev = pyfolio.get_pf_items()
+	 
+	 print('-- RETURNS')
+    print(returns)
+	 print('-- POSITIONS')
+    print(positions)
+    print('-- TRANSACTIONS')
+    print(transactions)
+	 print('-- GROSS LEVERAGE')
+    print(gross_lev)
+
+    import pyfolio as pf
+	 # PyFolio and backtrader
+	 pf.create_round_trip_tear_sheet(returns, positions, transactions)
+	 
+	 len(returns.index)
+	 benchmark_rets = pd.Series([0.00004] * len(returns.index), index=returns.index)   
+	 pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets)
+
