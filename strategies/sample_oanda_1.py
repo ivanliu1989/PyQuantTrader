@@ -145,5 +145,6 @@ if __name__ == '__main__':
 	 
 	 len(returns.index)
 	 benchmark_rets = pd.Series([0.00004] * len(returns.index), index=returns.index)   
-	 pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets)
+	 pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets,
+							live_start_date='2017-07-10')
 
