@@ -4,18 +4,15 @@
 Created on Sat Jul 22 21:47:21 2017
 
 @author: Ivan Liu
-"""
-
-from __future__ import (absolute_import, division, print_function,  
-                        unicode_literals)  
-  
-import datetime  # For datetime objects  
+"""  
+from datetime import datetime 
 import pandas as pd  
 import backtrader as bt  
 import numpy as np  
 import PyQuantTrader.validation.walkforward as wfd
 from copy import deepcopy
 from pandas import Series, DataFrame
+import oandapy
   
 class ssa_index_ind(bt.Indicator):  
     lines = ('ssa',)  
@@ -205,15 +202,23 @@ if __name__ == '__main__':
     cerebro = bt.Cerebro()  
     # Add a strategy  
     cerebro.addstrategy(MyStrategy)  
-    # 本地数据，笔者用Wind获取的东风汽车数据以csv形式存储在本地。  
-    # parase_dates = True是为了读取csv为dataframe的时候能够自动识别datetime格式的字符串，big作为index  
-    # 注意，这里最后的pandas要符合backtrader的要求的格式  
-    dataframe = pd.read_csv('./datas/yhoo-1996-2015.txt', index_col=0, parse_dates=True)  
-    dataframe['openinterest'] = 0  
-    data = bt.feeds.PandasData(dataname=dataframe,  
-                            fromdate = datetime.datetime(2013, 1, 1),  
-                            todate = datetime.datetime(2015, 12, 31)  
-                            )  
+    
+    # Oanda data
+    account = "101-011-6029361-001"
+    access_token="8153764443276ed6230c2d8a95dac609-e9e68019e7c1c51e6f99a755007914f7"
+    account_type = "practice"
+    # Register APIs
+    oanda = oandapy.API(environment=account_type, access_token=access_token)
+    # Get historical prices
+    hist = oanda.get_history(instrument = "AUD_USD", granularity = "H1", count = 5000, candleFormat = "midpoint")
+    dataframe = pd.DataFrame(hist['candles'])
+    dataframe['openinterest'] = 0 
+    dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
+    dataframe['time'] = pd.to_datetime(dataframe['time'])
+    dataframe = dataframe.set_index('time')
+    dataframe = dataframe.rename(columns={'openMid': 'open', 'highMid': 'high', 'lowMid': 'low', 'closeMid': 'close'})
+    data = bt.feeds.PandasData(dataname=dataframe)  
+    
     # Add the Data Feed to Cerebro  
     cerebro.adddata(data)  
     # Set our desired cash start  

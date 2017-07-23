@@ -4,11 +4,7 @@
 Created on Sat Jul 22 21:47:21 2017
 
 @author: Ivan Liu
-"""
-
-from __future__ import (absolute_import, division, print_function,  
-                        unicode_literals)  
-  
+"""  
 import datetime  # For datetime objects  
 import pandas as pd  
 import backtrader as bt  
