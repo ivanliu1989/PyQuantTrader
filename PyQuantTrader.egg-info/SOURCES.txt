@@ -12,6 +12,7 @@ PyQuantTrader/api/__init__.py
 PyQuantTrader/api/oanda.py
 PyQuantTrader/engines/__init__.py
 PyQuantTrader/engines/engines.py
+PyQuantTrader/indicators/KalmanFilter.py
 PyQuantTrader/indicators/__init__.py
 PyQuantTrader/indicators/ssa_index.py
 PyQuantTrader/observers/AcctValue.py
@@ -20,6 +21,7 @@ PyQuantTrader/performance/__init__.py
 PyQuantTrader/performance/performance.py
 PyQuantTrader/sizers/PropSizer.py
 PyQuantTrader/sizers/__init__.py
+PyQuantTrader/strategy/Kalmanfilter.py
 PyQuantTrader/strategy/MovingAvgCrossover.py
 PyQuantTrader/strategy/SSAIndex.py
 PyQuantTrader/strategy/__init__.py

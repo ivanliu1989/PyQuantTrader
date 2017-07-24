@@ -8,3 +8,4 @@ Created on Sat Jul 22 14:52:43 2017
 
 from .MovingAvgCrossover import *
 from .SSAIndex import *
+from .Kalmanfilter import *

@@ -7,3 +7,4 @@ Created on Sat Jul 22 14:52:43 2017
 """
 
 from .ssa_index import *
+from .KalmanFilter import *
