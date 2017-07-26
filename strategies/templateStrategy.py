@@ -37,9 +37,9 @@ class MyStrategy(bt.Strategy):
     def __init__(self):  
         #self.AUDUSDclose = self.datas[0].close
         #self.USDCADclose = self.datas[1].close
-        #self.Spreads = Spreads()
+        self.Spreads = Spreads(self.datas[0], self.datas[1])
         # self.dataclose = self.datas[0].close
-        self.sma1 = bt.indicators.SMA(self.data1.close, period=15)
+        #self.sma1 = bt.indicators.SMA(self.data1.close, period=15)
         
     def start(self):  
         print("the world call me!")  
@@ -48,8 +48,8 @@ class MyStrategy(bt.Strategy):
         print("not mature")  
   
     def next(self):  
-        #self.log('Spreads, %.10f' % self.Spreads)  
-        self.log('BUY CREATE, %.2f' % self.sma1[0])  
+        self.log('Spreads, %.10f' % self.Spreads[0])  
+        #self.log('BUY CREATE, %.2f' % self.sma1[0])  
     
 # Sizer
 
@@ -62,8 +62,8 @@ class Spreads(bt.Indicator):
     lines = ('Spreads',)
     
     def __init__(self):
-        self.AUDUSDclose = self.data
-        self.USDCADclose = self.data + 1
+        self.AUDUSDclose = self.data0.close
+        self.USDCADclose = self.data1.close
     
     def next(self):
         self.lines.Spreads[0] = math.log10(self.AUDUSDclose[0] / self.USDCADclose[0])
