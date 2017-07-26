@@ -48,6 +48,7 @@ class MyStrategy(bt.Strategy):
         self.ssa = ind.ssa_index.ssa_index_ind(ssa_window=self.params.ssa_window, subplot=False)  
         # bt.indicator.LinePlotterIndicator(self.ssa, name='ssa')  
         self.sma = bt.indicators.SimpleMovingAverage(period=self.params.maperiod)  
+        
     def start(self):  
         print("the world call me!")  
   
