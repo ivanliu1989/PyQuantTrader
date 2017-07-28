@@ -48,7 +48,11 @@ class MyStrategy(bt.Strategy):
         print("not mature")  
   
     def next(self):  
-        self.log('Spreads, %.10f' % self.Spreads[0])  
+        self.log('Spreads, %.10f' % self.Spreads[0]) 
+        
+        for i, d in enumerate(self.datas):
+            self.log('Currency, %.10f' % d[0]) 
+         
         #self.log('BUY CREATE, %.2f' % self.sma1[0])  
     
 # Sizer
