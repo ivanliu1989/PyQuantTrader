@@ -29,17 +29,45 @@ import oandapy
 # Strategy
 class MyStrategy(bt.Strategy):  
     
+    params = dict(
+            hold = [8,8],
+            )
+    
+    def notify_order(self, order):
+        if order.status == order.Submitted:
+            return
+
+        dt, dn = self.datetime.datetime(), order.data._name
+        print('{} {} Order {} Status {}'.format(
+            dt, dn, order.ref, order.getstatusname())
+        )
+
+        whichord = ['main', 'stop', 'limit', 'close']
+        
+        if not order.alive():  # not alive - nullify
+            dorders = self.o[order.data]
+            idx = dorders.index(order)
+            dorders[idx] = None
+            print('-- No longer alive {} Ref'.format(whichord[idx]))
+
+            if all(x is None for x in dorders):
+                dorders[:] = []  # empty list - New orders allowed
+
+
     def log(self, txt, dt=None):  
         ''''' Logging function fot this strategy'''  
-        dt = dt or self.datas[0].datetime.date(0)  
+        dt = dt or self.datas[0].datetime.datetime(0)  
         print('%s, %s' % (dt.isoformat(), txt))  
 
     def __init__(self):  
         #self.AUDUSDclose = self.datas[0].close
         #self.USDCADclose = self.datas[1].close
-        self.Spreads = Spreads(self.datas[0], self.datas[1])
         # self.dataclose = self.datas[0].close
         #self.sma1 = bt.indicators.SMA(self.data1.close, period=15)
+        
+        self.Spreads = Spreads(self.datas[0], self.datas[1])
+        self.o = dict() # orders per data (main, stop, limit, manual-close)
+        self.holding = dict() # holding periods per data
         
     def start(self):  
         print("the world call me!")  
@@ -51,10 +79,23 @@ class MyStrategy(bt.Strategy):
         self.log('Spreads, %.10f' % self.Spreads[0]) 
         
         for i, d in enumerate(self.datas):
-            self.log('Currency, %.10f' % d[0]) 
-         
-        #self.log('BUY CREATE, %.2f' % self.sma1[0])  
-    
+            dt, dn = self.datetime.datetime(), d._name
+            pos = self.getposition(d).size
+            print('{} {} Position {}'.format(dt, dn, pos))
+            
+            if not pos and not self.o.get(d, None):  # no market / no orders
+                self.o[d] = [self.buy(data=d)]
+                print('{} {} Buy {}'.format(dt, dn, self.o[d][0].ref))
+                self.holding[d] = 0
+                
+            elif pos:
+                self.holding[d] += 1
+                if self.holding[d] >= self.p.hold[i]:
+                    o = self.close(data=d)
+                    self.o[d].append(o)  # manual order to list of orders
+                    print('{} {} Manual Close {}'.format(dt, dn, o.ref))
+
+
 # Sizer
 
 
@@ -120,14 +161,44 @@ def runstrat(args=None):
         
     # Sizer
     
+    # Observer
+    
+    # Analyzer
+    cerebro.addanalyzer(bt.analyzers.PyFolio)
     
     # Strategy
     cerebro.addstrategy(MyStrategy)
     
     # Execute
-    cerebro.run()
+    strats = cerebro.run()
     
+    # Report
+    cerebro.plot()  
     
+    strat0 = strats[0]
+    pyfolio = strat0.analyzers.getbyname('pyfolio')
+    returns, positions, transactions, gross_lev = pyfolio.get_pf_items()
+    # returns.to_csv('D:/Projects/PyQuantTrader/strategies/returns.csv')
+    # positions.to_csv('D:/Projects/PyQuantTrader/strategies/positions.csv')
+    # transactions.to_csv('D:/Projects/PyQuantTrader/strategies/transactions.csv')
+    # gross_lev.to_csv('D:/Projects/PyQuantTrader/strategies/gross_lev.csv')
+  
+    # print('-- RETURNS')
+    # print(returns)
+    # print('-- POSITIONS')
+    # print(positions)
+    # print('-- TRANSACTIONS')
+    # print(transactions)
+    # print('-- GROSS LEVERAGE')
+    print(gross_lev)
+
+    import pyfolio as pf
+    # PyFolio and backtrader
+    pf.create_round_trip_tear_sheet(returns, positions, transactions)
+    benchmark_rets = pd.Series([0.00004] * len(returns.index), index=returns.index)   
+    pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets,
+                              live_start_date='2017-07-10')
+
     
     
 if __name__ == '__main__':  
