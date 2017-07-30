@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # Register APIs
     oanda = oandapy.API(environment=account_type, access_token=access_token)
     # Get historical prices
-    hist = oanda.get_history(instrument = "AUD_CAD", granularity = "H1", count = 5000, candleFormat = "midpoint")
+    hist = oanda.get_history(instrument = "AUD_CAD", granularity = "D", count = 5000, candleFormat = "midpoint")
     dataframe = pd.DataFrame(hist['candles'])
     dataframe['openinterest'] = 0 
     dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     cash = 10000
     leverage = 20
     init_assets = cash * leverage
-    positions = init_assets * 0.02
+    stakes = init_assets * 0.02
     itrs = 40
     wfd_split = 10
     
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         trainer.broker.set_cash(init_assets)
         trainer.broker.setcommission(0.0002)
         trainer.addanalyzer(pqt_ana.AcctStats)
-        trainer.addsizer(bt.sizers.SizerFix, stake=positions)
+        trainer.addsizer(bt.sizers.SizerFix, stake=stakes)
         # trainer.addsizer(pqt_sizers.PropSizer)
         tester = deepcopy(trainer)
      
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     cerebro_wf.addobserver(pqt_obs.AcctValue)
     cerebro_wf.addobservermulti(bt.observers.BuySell)    # Plots up/down arrows
     #cerebro_wf.addsizer(pqt_sizers.PropSizer)
-    cerebro_wf.addsizer(bt.sizers.SizerFix, stake=positions)
+    cerebro_wf.addsizer(bt.sizers.SizerFix, stake=stakes)
     cerebro_wf.addanalyzer(pqt_ana.AcctStats)
      
     cerebro_wf.addanalyzer(bt.analyzers.PyFolio)
@@ -150,7 +150,7 @@ if __name__ == '__main__':
 #    pf.create_round_trip_tear_sheet(returns, positions, transactions)
 	 
 #    len(returns.index)
-    benchmark_rets = pd.Series([0.0004] * len(returns.index), index=returns.index)   
+    benchmark_rets = pd.Series([0.000016] * len(returns.index), index=returns.index)   
     pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets,
                               live_start_date='2017-07-10')
 
