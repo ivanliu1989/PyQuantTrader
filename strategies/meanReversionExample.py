@@ -10,6 +10,8 @@ from pandas import DataFrame
 import random
 from copy import deepcopy
 import math
+import statsmodels.formula.api as sm
+import statsmodels.tsa.stattools as coint
 
 # Backtrader
 import backtrader as bt
@@ -26,11 +28,75 @@ from PyQuantTrader import sizers as pqt_sizers
 import oandapy
 
 
+# Indicators
+class OLS_HedgeRatio(bt.ind.PeriodN):
+    '''
+    Calculates a linear regression using ``statsmodel.OLS`` (Ordinary least
+    squares) of data1 on data0
+    Uses ``pandas`` and ``statsmodels``
+    '''
+    _mindatas = 2  # ensure at least 2 data feeds are passed
+
+    packages = (
+        ('pandas', 'pd'),
+        ('statsmodels.api', 'sm'),
+    )
+    lines = ('slope', 'intercept',)
+    params = (('period', 10),)
+
+    def next(self):
+        p0 = pd.Series(self.data0.get(size=self.p.period))
+        p1 = pd.Series(self.data1.get(size=self.p.period))
+        p1 = sm.add_constant(p1, prepend=True)
+        slope, intercept = sm.OLS(p0, p1).fit().params
+
+        self.lines.slope[0] = slope
+        self.lines.intercept[0] = intercept
+
+class OLS_Zscore(bt.ind.PeriodN):
+    '''
+    Calculates the ``zscore`` for data0 and data1. Although it doesn't directly
+    uses any external package it relies on ``OLS_SlopeInterceptN`` which uses
+    ``pandas`` and ``statsmodels``
+    '''
+    _mindatas = 2  # ensure at least 2 data feeds are passed
+    lines = ('spread', 'spread_mean', 'spread_std', 'zscore',)
+    params = (('period', 10),)
+
+    def __init__(self):
+        slint = OLS_HedgeRatio(*self.datas)
+
+        spread = self.data0 - (slint.slope * self.data1 + slint.intercept)
+        self.l.spread = spread
+
+        self.l.spread_mean = bt.ind.SMA(spread, period=self.p.period)
+        self.l.spread_std = bt.ind.StdDev(spread, period=self.p.period)
+        self.l.zscore = (spread - self.l.spread_mean) / self.l.spread_std
+
+   
+# Sizer
+class MeanReversionSizer(bt.Sizer):
+    """Proportion sizer"""
+    params = {"prop": 0.1}
+ 
+    def _getsizing(self, comminfo, cash, data, isbuy):
+        """Returns the proper sizing"""
+        target = self.broker.getvalue() * self.params.prop    # Ideal total value of the position
+        price = data.close[0]
+        qty = int(target / price)    # The actual number of shares bought
+        if qty * price > cash:
+            return 0    # Not enough money for this trade
+        else:
+            return qty
+        # return self.broker.getposition(data).size    # Clear the position
+        
 # Strategy
-class MyStrategy(bt.Strategy):  
+class MeanReversionSt(bt.Strategy):  
     
     params = dict(
             hold = [8,8],
+            lookback = 60,
+            zs_thres = 2
             )
     
     def notify_order(self, order):
@@ -64,8 +130,10 @@ class MyStrategy(bt.Strategy):
         
         self.o = dict() # orders per data (main, stop, limit, manual-close)
         self.holding = dict() # holding periods per data
-        kf = KalmanFilterInd()
-        self.et, self.sqrt_qt, self.theta0, self.theta1 = kf.lines.et, kf.lines.sqrt_qt, kf.lines.theta0, kf.lines.theta1
+        ols_hedge = OLS_HedgeRatio()
+        ols_zscore = OLS_Zscore()
+        self.hedgeRatio = ols_hedge.lines.slope
+        self.zscore = ols_zscore.lines.zscore
         
     def start(self):  
         print("the world call me!")  
@@ -75,38 +143,34 @@ class MyStrategy(bt.Strategy):
   
     def next(self):  
         
-        if self.et[0] < -self.sqrt_qt[0]:
-            # Long entry
-            action = 'long'
-            size0 = 1
-            size1 = self.theta0[0]
-        elif self.et[0] > self.sqrt_qt[0]:
-            # Short entry
-            action = 'short'
-            size0 = -self.theta0[0]
-            size1 = -1
-        elif self.et[0] > -self.sqrt_qt[0]:
-            # Long exit
-            action = 'longexit'
-            size0 = -1
-            size1 = -self.theta0[0]
-        elif self.et[0] < self.sqrt_qt[0]:
-            # Short exit
-            action = 'shortexit'
-            size0 = self.theta0[0]
-            size1 = 1
-        else:
-            action = 'none'
-            size0 = 0
-            size1 = 0
-            
-        self.log('Kalman Filter: %s, %.4f, %.4f | et: %.4f, sqrt_qt: %.4f' % (action, size0, size1, self.et[0], self.sqrt_qt[0]))
+        self.log('OLS Hedge Ratio: %.4f | ZScore: %.4f' % (self.hedgeRatio[0], self.zscore[0]))
         
-#        for i, d in enumerate(self.datas):
-#            dt, dn = self.datetime.datetime(), d._name
-#            pos = self.getposition(d).size
-#            print('{} {} Position {}'.format(dt, dn, pos))
-#            
+        
+        
+        
+        for i, d in enumerate(self.datas):
+            dt, dn = self.datetime.datetime(), d._name
+            pos = self.getposition(d).size
+            print('{} {} Position {}'.format(dt, dn, pos))
+            
+            if self.zscore[0] >= self.p.zs_thres:
+                # go Short
+                if i == 0:
+                    self.sell(data=d)
+                elif i == 1:
+                    self.buy(data=d)
+                    
+            elif self.zscore[0] <= -self.p.zs_thres:
+                # go Long
+                if i == 0:
+                    self.buy(data=d)
+                elif i == 1:
+                    self.sell(data=d)
+                    
+                    
+            # elif pos and self.zscore[0] <= -self.p.zs_thres:
+            
+            
 #            if not pos and not self.o.get(d, None):  # no market / no orders
 #                self.o[d] = [self.buy(data=d)]
 #                print('{} {} Buy {}'.format(dt, dn, self.o[d][0].ref))
@@ -120,76 +184,6 @@ class MyStrategy(bt.Strategy):
 #                    print('{} {} Manual Close {}'.format(dt, dn, o.ref))
 
 
-# Sizer
-class KalmanFilterSizer(bt.Sizer):
-    """Proportion sizer"""
-    params = {"prop": 0.1}
- 
-    def _getsizing(self, comminfo, cash, data, isbuy):
-        """Returns the proper sizing"""
-        target = self.broker.getvalue() * self.params.prop    # Ideal total value of the position
-        price = data.close[0]
-        qty = int(target / price)    # The actual number of shares bought
-        if qty * price > cash:
-            return 0    # Not enough money for this trade
-        else:
-            return qty
-        # return self.broker.getposition(data).size    # Clear the position
-        
-        
-# Indicators
-class NumPy(object):
-    packages = (('numpy', 'np'),)
-    
-class KalmanFilterInd(bt.Indicator, NumPy):
-    _mindatas = 2  # needs at least 2 data feeds
-
-    packages = ('pandas',)
-    lines = ('et', 'sqrt_qt','theta0','theta1',)
-
-    params = dict(
-        delta=1e-4,
-        vt=1e-3,
-    )
-
-    def __init__(self):
-        self.wt = self.p.delta / (1 - self.p.delta) * np.eye(2)
-        self.theta = np.zeros(2)
-        self.P = np.zeros((2, 2))
-        self.R = None
-
-        self.d1_prev = self.data1(-1)  # data1 yesterday's price
-
-    def next(self):
-        F = np.asarray([self.data0[0], 1.0]).reshape((1, 2))
-        y = self.d1_prev[0]
-
-        if self.R is not None:  # self.R starts as None, self.C set below
-            self.R = self.C + self.wt
-        else:
-            self.R = np.zeros((2, 2))
-
-        yhat = F.dot(self.theta)
-        et = y - yhat
-
-        # Q_t is the variance of the prediction of observations and hence
-        # \sqrt{Q_t} is the standard deviation of the predictions
-        Qt = F.dot(self.R).dot(F.T) + self.p.vt
-        sqrt_Qt = np.sqrt(Qt)
-
-        # The posterior value of the states \theta_t is distributed as a
-        # multivariate Gaussian with mean m_t and variance-covariance C_t
-        At = self.R.dot(F.T) / Qt
-        self.theta = self.theta + At.flatten() * et
-        self.C = self.R - At * F.dot(self.R)
-
-        # Fill the lines
-        self.lines.et[0] = et
-        self.lines.sqrt_qt[0] = sqrt_Qt
-        self.lines.theta0[0] = self.theta[0]
-        self.lines.theta1[0] = self.theta[1]
-        
-
 # Run Strategy
 def runstrat(args=None):
     
@@ -200,7 +194,7 @@ def runstrat(args=None):
     # Register APIs
     oanda = oandapy.API(environment=account_type, access_token=access_token)
     # Get historical prices
-    hist = oanda.get_history(instrument = "AUD_USD", granularity = "D", count = 1000, candleFormat = "midpoint")
+    hist = oanda.get_history(instrument = "AUD_USD", granularity = "H1", count = 5000, candleFormat = "midpoint")
     dataframe = pd.DataFrame(hist['candles'])
     dataframe['openinterest'] = 0 
     dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
@@ -209,7 +203,7 @@ def runstrat(args=None):
     dataframe = dataframe.rename(columns={'openMid': 'open', 'highMid': 'high', 'lowMid': 'low', 'closeMid': 'close'})
     AUDUSD = bt.feeds.PandasData(dataname=dataframe)  
     
-    hist = oanda.get_history(instrument = "USD_CAD", granularity = "D", count = 1000, candleFormat = "midpoint")
+    hist = oanda.get_history(instrument = "USD_CAD", granularity = "H1", count = 5000, candleFormat = "midpoint")
     dataframe = pd.DataFrame(hist['candles'])
     dataframe['openinterest'] = 0 
     dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
@@ -236,7 +230,7 @@ def runstrat(args=None):
     cerebro.broker.setcommission(0.0002)
         
     # Sizer
-    cerebro.addsizer(KalmanFilterSizer)
+    cerebro.addsizer(MeanReversionSizer)
     
     # Observer
     
@@ -244,7 +238,7 @@ def runstrat(args=None):
     cerebro.addanalyzer(bt.analyzers.PyFolio)
     
     # Strategy
-    cerebro.addstrategy(MyStrategy)
+    cerebro.addstrategy(MeanReversionSt)
     
     # Execute
     strats = cerebro.run()

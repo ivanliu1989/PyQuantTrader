@@ -101,8 +101,8 @@ class NumPy(object):
 class KalmanFilterInd(bt.Indicator, NumPy):
     _mindatas = 2  # needs at least 2 data feeds
 
-    packages = ('pandas',)
-    lines = ('et', 'sqrt_qt')
+    packages = ('pandas', 'numpy', 'np',)
+    lines = ('et', 'sqrt_qt', 'theta)
 
     params = dict(
         delta=1e-4,
@@ -143,3 +143,4 @@ class KalmanFilterInd(bt.Indicator, NumPy):
         # Fill the lines
         self.lines.et[0] = et
         self.lines.sqrt_qt[0] = sqrt_Qt
+        self.lines.theta[0] = self.theta
