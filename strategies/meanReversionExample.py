@@ -56,7 +56,7 @@ class OLS_HedgeRatio(bt.ind.PeriodN):
 class OLS_Zscore(bt.ind.PeriodN):
     '''
     Calculates the ``zscore`` for data0 and data1. Although it doesn't directly
-    uses any external package it relies on ``OLS_SlopeInterceptN`` which uses
+    uses any external package it relies on ``OLS_HedgeRatio`` which uses
     ``pandas`` and ``statsmodels``
     '''
     _mindatas = 2  # ensure at least 2 data feeds are passed
@@ -76,8 +76,10 @@ class OLS_Zscore(bt.ind.PeriodN):
    
 # Sizer
 class MeanReversionSizer(bt.Sizer):
-    """Proportion sizer"""
-    params = {"prop": 0.1}
+    '''
+    Proportion sizer
+    '''
+    params = {"prop": 0.05}
  
     def _getsizing(self, comminfo, cash, data, isbuy):
         """Returns the proper sizing"""
@@ -94,31 +96,10 @@ class MeanReversionSizer(bt.Sizer):
 class MeanReversionSt(bt.Strategy):  
     
     params = dict(
-            hold = [8,8],
-            lookback = 60,
+            hold = [120,120],
+            lookback = 120,
             zs_thres = 2
             )
-    
-    def notify_order(self, order):
-        if order.status == order.Submitted:
-            return
-
-        dt, dn = self.datetime.datetime(), order.data._name
-        print('{} {} Order {} Status {}'.format(
-            dt, dn, order.ref, order.getstatusname())
-        )
-
-        whichord = ['main', 'stop', 'limit', 'close']
-        
-        if not order.alive():  # not alive - nullify
-            dorders = self.o[order.data]
-            idx = dorders.index(order)
-            dorders[idx] = None
-            print('-- No longer alive {} Ref'.format(whichord[idx]))
-
-            if all(x is None for x in dorders):
-                dorders[:] = []  # empty list - New orders allowed
-
 
     def log(self, txt, dt=None):  
         ''''' Logging function fot this strategy'''  
@@ -130,6 +111,7 @@ class MeanReversionSt(bt.Strategy):
         
         self.o = dict() # orders per data (main, stop, limit, manual-close)
         self.holding = dict() # holding periods per data
+        self.qty = dict() # qty taken per data
         ols_hedge = OLS_HedgeRatio()
         ols_zscore = OLS_Zscore()
         self.hedgeRatio = ols_hedge.lines.slope
@@ -144,10 +126,7 @@ class MeanReversionSt(bt.Strategy):
     def next(self):  
         
         self.log('OLS Hedge Ratio: %.4f | ZScore: %.4f' % (self.hedgeRatio[0], self.zscore[0]))
-        
-        
-        
-        
+
         for i, d in enumerate(self.datas):
             dt, dn = self.datetime.datetime(), d._name
             pos = self.getposition(d).size
@@ -156,33 +135,25 @@ class MeanReversionSt(bt.Strategy):
             if self.zscore[0] >= self.p.zs_thres:
                 # go Short
                 if i == 0:
-                    self.sell(data=d)
+                    o1 = self.sell(data=d)
+                    self.qty[0] = o1.size
                 elif i == 1:
-                    self.buy(data=d)
-                    
+                    self.buy(data=d, size=int(self.qty[0]*self.hedgeRatio[0]))
+                
             elif self.zscore[0] <= -self.p.zs_thres:
                 # go Long
                 if i == 0:
-                    self.buy(data=d)
+                    o1 = self.buy(data=d)
+                    self.qty[0] = o1.size
                 elif i == 1:
-                    self.sell(data=d)
+                    self.sell(data=d, size=int(self.qty[0]*self.hedgeRatio[0]))
+                self.holding[d] = 0
+            elif pos:
+                # close postions
+                self.holding[d] += 1
+                if self.holding[d] >= self.p.hold[i]:
+                    self.close(data=d)
                     
-                    
-            # elif pos and self.zscore[0] <= -self.p.zs_thres:
-            
-            
-#            if not pos and not self.o.get(d, None):  # no market / no orders
-#                self.o[d] = [self.buy(data=d)]
-#                print('{} {} Buy {}'.format(dt, dn, self.o[d][0].ref))
-#                self.holding[d] = 0
-#                
-#            elif pos:
-#                self.holding[d] += 1
-#                if self.holding[d] >= self.p.hold[i]:
-#                    o = self.close(data=d)
-#                    self.o[d].append(o)  # manual order to list of orders
-#                    print('{} {} Manual Close {}'.format(dt, dn, o.ref))
-
 
 # Run Strategy
 def runstrat(args=None):
@@ -232,8 +203,6 @@ def runstrat(args=None):
     # Sizer
     cerebro.addsizer(MeanReversionSizer)
     
-    # Observer
-    
     # Analyzer
     cerebro.addanalyzer(bt.analyzers.PyFolio)
     
@@ -261,12 +230,12 @@ def runstrat(args=None):
     # print('-- TRANSACTIONS')
     # print(transactions)
     # print('-- GROSS LEVERAGE')
-    print(gross_lev)
+    # print(gross_lev)
 
     import pyfolio as pf
     # PyFolio and backtrader
-    pf.create_round_trip_tear_sheet(returns, positions, transactions)
-    benchmark_rets = pd.Series([0.00004] * len(returns.index), index=returns.index)   
+    # pf.create_round_trip_tear_sheet(returns, positions, transactions)
+    benchmark_rets = pd.Series([0.0004] * len(returns.index), index=returns.index)   
     pf.create_full_tear_sheet(returns, positions, transactions, benchmark_rets=benchmark_rets,
                               live_start_date='2017-07-10')
 
