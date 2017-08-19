@@ -191,6 +191,22 @@ class KalmanFilterInd(bt.Indicator, NumPy):
         self.lines.theta1[0] = self.theta[1]
         
 
+class MachineLearningInd(bt.Indicator):
+    
+    _mindatas = 2
+    
+    packages = (('pandas','pd'),
+                ('numpy','np'),
+                ('sklearn', 'sk'),)
+    lines = ('mlInd',)
+    
+    params = dict(
+            lookbacks = 500,
+            )
+    
+    def __init__(self):
+        
+
 # Run Strategy
 def runstrat(args=None):
     
