@@ -11,9 +11,11 @@ from pandas import DataFrame
 import random
 from copy import deepcopy
 import math
+import numpy as np
 
 # Backtrader
 import backtrader as bt
+from backtrader.indicators import EMA
 
 # PyQuantTrader
 from PyQuantTrader import strategy as pqt_strategy
@@ -25,6 +27,70 @@ from PyQuantTrader import sizers as pqt_sizers
 
 # OandaAPI
 import oandapy
+
+# Keras
+from keras.layers.core import Dense, Activation, Dropout
+from keras.layers.recurrent import LSTM
+from keras.models import Sequential
+
+def load_data(data, seq_len, normalise_window):
+    
+    sequence_length = seq_len + 1
+    result = []
+    for index in range(len(data) - sequence_length):
+        result.append(data[index: index + sequence_length])
+    
+    if normalise_window:
+        result = normalise_windows(result)
+
+    result = np.array(result)
+
+    row = round(0.9 * result.shape[0])
+    train = result[:int(row), :]
+    np.random.shuffle(train)
+    x_train = train[:, :-1]
+    y_train = train[:, -1]
+    x_test = result[int(row):, :-1]
+    y_test = result[int(row):, -1]
+
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))  
+
+    return [x_train, y_train, x_test, y_test]
+
+def normalise_windows(window_data):
+    normalised_data = []
+    for window in window_data:
+        normalised_window = [((float(p) / float(window[0])) - 1) for p in window]
+        normalised_data.append(normalised_window)
+    return normalised_data
+
+def build_model(layers, dropout):
+    model = Sequential()
+
+    model.add(LSTM(
+        input_dim=layers[0],
+        output_dim=layers[1],
+        return_sequences=True))
+    model.add(Dropout(dropout))
+
+    model.add(LSTM(
+        layers[2],
+        return_sequences=False))
+    model.add(Dropout(dropout))
+
+    model.add(Dense(
+        output_dim=layers[3]))
+    model.add(Activation("linear"))
+
+    model.compile(loss="mse", optimizer="rmsprop")
+    return model
+
+def predict_point_by_point(model, data):
+    #Predict each timestep given the last sequence of true data, in effect only predicting 1 step ahead each time
+    predicted = model.predict(data)
+    predicted = np.reshape(predicted, (predicted.size,))
+    return predicted
 
 
 # Strategy
@@ -43,30 +109,14 @@ class MyStrategy(bt.Strategy):
             dt, dn, order.ref, order.getstatusname())
         )
 
-        whichord = ['main', 'stop', 'limit', 'close']
-        
-        if not order.alive():  # not alive - nullify
-            dorders = self.o[order.data]
-            idx = dorders.index(order)
-            dorders[idx] = None
-            print('-- No longer alive {} Ref'.format(whichord[idx]))
-
-            if all(x is None for x in dorders):
-                dorders[:] = []  # empty list - New orders allowed
-
-
     def log(self, txt, dt=None):  
         ''''' Logging function fot this strategy'''  
         dt = dt or self.datas[0].datetime.datetime(0)  
         print('%s, %s' % (dt.isoformat(), txt))  
 
     def __init__(self):  
-        #self.sma1 = bt.indicators.SMA(self.data1.close, period=15)
-        
-        self.o = dict() # orders per data (main, stop, limit, manual-close)
-        self.holding = dict() # holding periods per data
-        kf = KalmanFilterInd()
-        self.et, self.sqrt_qt, self.theta0, self.theta1 = kf.lines.et, kf.lines.sqrt_qt, kf.lines.theta0, kf.lines.theta1
+        lstmInd = MachineLearningInd()
+        self.lstmPred = lstmInd.lines.lstmPred
         
     def start(self):  
         print("the world call me!")  
@@ -76,156 +126,97 @@ class MyStrategy(bt.Strategy):
   
     def next(self):  
         
-        if self.et[0] < -self.sqrt_qt[0]:
-            # Long entry
-            action = 'long'
-            size0 = 1
-            size1 = self.theta0[0]
-        elif self.et[0] > self.sqrt_qt[0]:
-            # Short entry
-            action = 'short'
-            size0 = -self.theta0[0]
-            size1 = -1
-        elif self.et[0] > -self.sqrt_qt[0]:
-            # Long exit
-            action = 'longexit'
-            size0 = -1
-            size1 = -self.theta0[0]
-        elif self.et[0] < self.sqrt_qt[0]:
-            # Short exit
-            action = 'shortexit'
-            size0 = self.theta0[0]
-            size1 = 1
-        else:
-            action = 'none'
-            size0 = 0
-            size1 = 0
+        for i, d in enumerate(self.datas):
             
-        self.log('Kalman Filter: %s, %.4f, %.4f | et: %.4f, sqrt_qt: %.4f' % (action, size0, size1, self.et[0], self.sqrt_qt[0]))
-        
-#        for i, d in enumerate(self.datas):
-#            dt, dn = self.datetime.datetime(), d._name
-#            pos = self.getposition(d).size
-#            print('{} {} Position {}'.format(dt, dn, pos))
-#            
-#            if not pos and not self.o.get(d, None):  # no market / no orders
-#                self.o[d] = [self.buy(data=d)]
-#                print('{} {} Buy {}'.format(dt, dn, self.o[d][0].ref))
-#                self.holding[d] = 0
-#                
-#            elif pos:
-#                self.holding[d] += 1
-#                if self.holding[d] >= self.p.hold[i]:
-#                    o = self.close(data=d)
-#                    self.o[d].append(o)  # manual order to list of orders
-#                    print('{} {} Manual Close {}'.format(dt, dn, o.ref))
+            if self.lstmPred[0] > 0:
+                # go Short
+                if i == 0:
+                    self.buy(data=d)
+                elif i == 1:
+                    self.sell(data=d)
+                
+            elif self.lstmPred[0] < 0:
+                # go Long
+                if i == 0:
+                    self.sell(data=d)
+                elif i == 1:
+                    self.buy(data=d)
+                    
+        self.log('LSTM: %.4f' % (self.lstmPred[0]))
 
 
-# Sizer
-class KalmanFilterSizer(bt.Sizer):
-    """Proportion sizer"""
-    params = {"prop": 0.1}
- 
-    def _getsizing(self, comminfo, cash, data, isbuy):
-        """Returns the proper sizing"""
-        target = self.broker.getvalue() * self.params.prop    # Ideal total value of the position
-        price = data.close[0]
-        qty = int(target / price)    # The actual number of shares bought
-        if qty * price > cash:
-            return 0    # Not enough money for this trade
-        else:
-            return qty
-        # return self.broker.getposition(data).size    # Clear the position
-        
-        
-# Indicators
-class NumPy(object):
-    packages = (('numpy', 'np'),)
-    
-class KalmanFilterInd(bt.Indicator, NumPy):
-    _mindatas = 2  # needs at least 2 data feeds
-
-    packages = ('pandas',)
-    lines = ('et', 'sqrt_qt','theta0','theta1',)
-
-    params = dict(
-        delta=1e-4,
-        vt=1e-3,
-    )
-
-    def __init__(self):
-        self.wt = self.p.delta / (1 - self.p.delta) * np.eye(2)
-        self.theta = np.zeros(2)
-        self.P = np.zeros((2, 2))
-        self.R = None
-
-        self.d1_prev = self.data1(-1)  # data1 yesterday's price
-
-    def next(self):
-        F = np.asarray([self.data0[0], 1.0]).reshape((1, 2))
-        y = self.d1_prev[0]
-
-        if self.R is not None:  # self.R starts as None, self.C set below
-            self.R = self.C + self.wt
-        else:
-            self.R = np.zeros((2, 2))
-
-        yhat = F.dot(self.theta)
-        et = y - yhat
-
-        # Q_t is the variance of the prediction of observations and hence
-        # \sqrt{Q_t} is the standard deviation of the predictions
-        Qt = F.dot(self.R).dot(F.T) + self.p.vt
-        sqrt_Qt = np.sqrt(Qt)
-
-        # The posterior value of the states \theta_t is distributed as a
-        # multivariate Gaussian with mean m_t and variance-covariance C_t
-        At = self.R.dot(F.T) / Qt
-        self.theta = self.theta + At.flatten() * et
-        self.C = self.R - At * F.dot(self.R)
-
-        # Fill the lines
-        self.lines.et[0] = et
-        self.lines.sqrt_qt[0] = sqrt_Qt
-        self.lines.theta0[0] = self.theta[0]
-        self.lines.theta1[0] = self.theta[1]
-        
-
-class MachineLearningInd(bt.Indicator):
+class MachineLearningInd(bt.ind.PeriodN):
     
     _mindatas = 2
     
     packages = (('pandas','pd'),
                 ('numpy','np'),
-                ('sklearn', 'sk'),)
-    lines = ('mlInd',)
+                ('sklearn', 'sk'),
+                ('statsmodels.api', 'sm'),
+                )
+    lines = ('lstmPred',)
     
     params = dict(
-            lookbacks = 500,
+            lookbacks = 4800,
+            seq_len = 50,
+            normalise_window = True,
+            batch_size = 64,
+            epochs = 2,
+            validation_split = 0.25,
+            dropout = 0.1,
+            nodes = 25,
             )
-    
     def __init__(self):
+        self.addminperiod(self.params.lookbacks)
         
+    def next(self):
+        p0 = np.array(self.data0.get(size=self.p.lookbacks))
+        p1 = np.array(self.data1.get(size=self.p.lookbacks))
+        
+        data = p0-p1
+
+        X_train, y_train, X_test, y_test = load_data(data, self.p.seq_len, self.p.normalise_window)
+        
+        model = build_model([1, self.p.nodes, self.p.nodes, 1], self.p.dropout)
+        model.fit(
+                 X_train,
+                 y_train,
+                 batch_size=self.p.batch_size,
+                 nb_epoch=self.p.epochs,
+                 validation_split=self.p.validation_split)
+        predictions = predict_point_by_point(model, X_test)        
+
+        self.lines.lstmPred[0] = predictions[-1]
 
 # Run Strategy
 def runstrat(args=None):
     
-    # csv data
-    AUDUSD_df = pd.read_csv("../Common Data/fx_pairs/AUD_USD_M15.csv")
-    AUDUSD_df = AUDUSD_df[['time', 'mid.o', 'mid.h', 'mid.l', 'mid.c', 'volume']]
-    AUDUSD_df = AUDUSD_df.rename(columns={'mid.o': 'open', 'mid.h': 'high', 'mid.l': 'low', 'mid.c': 'close'})
-    AUDUSD_df['openinterest'] = 0
-    AUDUSD_df = AUDUSD_df.set_index('time')
-    AUDUSD = bt.feeds.PandasData(dataname=AUDUSD_df) 
+    # Oanda data
+    account = "101-011-6029361-001"
+    access_token="8153764443276ed6230c2d8a95dac609-e9e68019e7c1c51e6f99a755007914f7"
+    account_type = "practice"
+    # Register APIs
+    oanda = oandapy.API(environment=account_type, access_token=access_token)
+    # Get historical prices
+    hist = oanda.get_history(instrument = "AUD_USD", granularity = "M15", count = 5000, candleFormat = "midpoint")
+    dataframe = pd.DataFrame(hist['candles'])
+    dataframe['openinterest'] = 0 
+    dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
+    dataframe['time'] = pd.to_datetime(dataframe['time'])
+    dataframe = dataframe.set_index('time')
+    dataframe = dataframe.rename(columns={'openMid': 'open', 'highMid': 'high', 'lowMid': 'low', 'closeMid': 'close'})
+    AUDUSD = bt.feeds.PandasData(dataname=dataframe)  
     
-    USDCAD_df = pd.read_csv("../Common Data/fx_pairs/USD_CAD_M15.csv")
-    USDCAD_df = USDCAD_df[['time', 'mid.o', 'mid.h', 'mid.l', 'mid.c', 'volume']]
-    USDCAD_df = USDCAD_df.rename(columns={'mid.o': 'open', 'mid.h': 'high', 'mid.l': 'low', 'mid.c': 'close'})
-    USDCAD_df['openinterest'] = 0
-    USDCAD_df = USDCAD_df.set_index('time')
-    USDCAD = bt.feeds.PandasData(dataname=USDCAD_df)
+    hist = oanda.get_history(instrument = "USD_CAD", granularity = "M15", count = 5000, candleFormat = "midpoint")
+    dataframe = pd.DataFrame(hist['candles'])
+    dataframe['openinterest'] = 0 
+    dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
+    dataframe['time'] = pd.to_datetime(dataframe['time'])
+    dataframe = dataframe.set_index('time')
+    dataframe = dataframe.rename(columns={'openMid': 'open', 'highMid': 'high', 'lowMid': 'low', 'closeMid': 'close'})
+    USDCAD = bt.feeds.PandasData(dataname=dataframe)  
     
-    n_cores = 4
+    n_cores = 6
     cash = 10000
     leverage = 20
     init_assets = cash * leverage
@@ -243,7 +234,7 @@ def runstrat(args=None):
     cerebro.broker.setcommission(0.0002)
         
     # Sizer
-    cerebro.addsizer(KalmanFilterSizer)
+    # cerebro.addsizer(KalmanFilterSizer)
     
     # Observer
     
