@@ -165,7 +165,7 @@ def runstrat(args=None):
     # Register APIs
     oanda = oandapy.API(environment=account_type, access_token=access_token)
     # Get historical prices
-    hist = oanda.get_history(instrument = "AUD_USD", granularity = "H1", count = 5000, candleFormat = "midpoint")
+    hist = oanda.get_history(instrument = "AUD_USD", granularity = "M15", count = 5000, candleFormat = "midpoint")
     dataframe = pd.DataFrame(hist['candles'])
     dataframe['openinterest'] = 0 
     dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]
@@ -174,7 +174,7 @@ def runstrat(args=None):
     dataframe = dataframe.rename(columns={'openMid': 'open', 'highMid': 'high', 'lowMid': 'low', 'closeMid': 'close'})
     AUDUSD = bt.feeds.PandasData(dataname=dataframe)  
     
-    hist = oanda.get_history(instrument = "USD_CAD", granularity = "H1", count = 5000, candleFormat = "midpoint")
+    hist = oanda.get_history(instrument = "USD_CAD", granularity = "M15", count = 5000, candleFormat = "midpoint")
     dataframe = pd.DataFrame(hist['candles'])
     dataframe['openinterest'] = 0 
     dataframe = dataframe[['time', 'openMid', 'highMid', 'lowMid', 'closeMid', 'volume', 'openinterest']]

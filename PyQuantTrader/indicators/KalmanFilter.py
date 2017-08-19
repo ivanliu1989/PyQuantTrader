@@ -102,7 +102,7 @@ class KalmanFilterInd(bt.Indicator, NumPy):
     _mindatas = 2  # needs at least 2 data feeds
 
     packages = ('pandas', 'numpy', 'np',)
-    lines = ('et', 'sqrt_qt', 'theta)
+    lines = ('et', 'sqrt_qt', 'theta')
 
     params = dict(
         delta=1e-4,
