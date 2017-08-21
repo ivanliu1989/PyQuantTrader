@@ -122,7 +122,7 @@ if __name__ == '__main__':
     cerebro_wf.addanalyzer(pqt_ana.AcctStats)
      
     cerebro_wf.addanalyzer(bt.analyzers.PyFolio)
-    cerebro_wf.addwriter(bt.WriterFile, csv=True, out='D:/Projects/PyQuantTrader/strategies/output.csv')
+    #cerebro_wf.addwriter(bt.WriterFile, csv=True, out='D:/Projects/PyQuantTrader/strategies/output.csv')
     strats = cerebro_wf.run()
     
     cerebro_wf.plot(iplot=True, volume=True)
@@ -131,10 +131,10 @@ if __name__ == '__main__':
     strat0 = strats[0]
     pyfolio = strat0.analyzers.getbyname('pyfolio')
     returns, positions, transactions, gross_lev = pyfolio.get_pf_items()
-    returns.to_csv('D:/Projects/PyQuantTrader/strategies/returns.csv')
-    positions.to_csv('D:/Projects/PyQuantTrader/strategies/positions.csv')
-    transactions.to_csv('D:/Projects/PyQuantTrader/strategies/transactions.csv')
-    gross_lev.to_csv('D:/Projects/PyQuantTrader/strategies/gross_lev.csv')
+    #returns.to_csv('D:/Projects/PyQuantTrader/strategies/returns.csv')
+    #positions.to_csv('D:/Projects/PyQuantTrader/strategies/positions.csv')
+    #transactions.to_csv('D:/Projects/PyQuantTrader/strategies/transactions.csv')
+    #gross_lev.to_csv('D:/Projects/PyQuantTrader/strategies/gross_lev.csv')
   
 #    print('-- RETURNS')
 #    print(returns)
