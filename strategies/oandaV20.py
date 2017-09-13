@@ -4,6 +4,16 @@ Created on Wed Aug 23 22:30:31 2017
 
 @author: sky_x
 """
+import argparse
+import datetime
+
+# The above could be sent to an independent module
+import backtrader as bt
+from backtrader.utils import flushfile  # win32 quick stdout flushing
+
+StoreCls = bt.stores.OandaStore
+DataCls = bt.feeds.OandaData
+BrokerCls = bt.brokers.OandaBroker
 
 exactbars = 1
 stopafter = 0
