@@ -17,8 +17,8 @@ BrokerCls = bt.brokers.OandaBroker
 
 exactbars = 1
 stopafter = 0
-token = "8153764443276ed6230c2d8a95dac609-e9e68019e7c1c51e6f99a755007914f7"
-account = "101-011-6029361-001"
+token = ""
+account = ""
 account_type = "practice"
 live = False
 qcheck=0.5
