@@ -26,8 +26,8 @@ import oandapy
 
 if __name__ == '__main__':  
     # Oanda data
-    account = "101-011-6029361-001"
-    access_token="8153764443276ed6230c2d8a95dac609-e9e68019e7c1c51e6f99a755007914f7"
+    account = ""
+    access_token=""
     account_type = "practice"
     # Register APIs
     oanda = oandapy.API(environment=account_type, access_token=access_token)
